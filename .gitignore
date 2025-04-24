@@ -1,0 +1,77 @@
+# Ignore operating system temporary files
+.DS_Store
+Thumbs.db
+
+# Ignore editor temporary files
+.vscode/
+.idea/
+
+# Ignore dependency files and directories
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# Ignore build directories
+dist/
+build/
+out/
+
+# Ignore log and temporary files
+*.log
+*.tmp
+
+# Ignore configuration files, including sensitive information
+.env
+config.js
+
+# Ignore generated files
+*.min.js
+*.min.css
+
+# Ignore backup files
+*.bak
+*.backup
+
+# Ignore database files
+*.sqlite
+
+# Ignore compressed files
+*.rar
+*.gz
+*.tar
+
+# Ignore IDE configuration files
+.gradle/
+.classpath
+.project
+
+# Ignore build output
+/target/
+/out/
+/.bin/
+
+# Ignore editor configuration
+.editorconfig
+*.sublime-project
+*.sublime-workspace
+
+# Ignore Jupyter Notebook checkpoint files
+.ipynb_checkpoints/
+
+# Ignore Python byte code files
+__pycache__/
+*.pyc
+
+# Ignore Mac OS specific files
+.AppleDouble
+.AppleDB
+.Spotlight
+.Trashes
+
+# Ignore Windows specific files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+

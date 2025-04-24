@@ -1,0 +1,258 @@
+use blake3::Hash;
+
+struct MerkleMountainRange {
+    // 存储各层节点
+    layers: Vec<Vec<Hash>>,
+    // 最大层数
+    max_height: usize,
+}
+
+impl MerkleMountainRange {
+    // 创建新的MMR，指定最大高度
+    pub fn new(max_height: usize) -> Self {
+        // 创建max_height
+        let mut layers = Vec::with_capacity(max_height);
+        for _ in 0..max_height {
+            layers.push(Vec::new());
+        }
+        MerkleMountainRange { layers, max_height }
+    }
+
+    // 向MMR添加叶子节点哈希值
+    pub fn append_leaf(&mut self, hash: Hash) {
+        // 将叶子节点哈希值添加到第0层
+        self.layers[0].push(hash);
+
+        // 尝试构建高层节点
+        self.build_peaks();
+    }
+
+    // 向MMR添加叶子节点（含原始数据）
+    pub fn append_data(&mut self, data: &[u8]) {
+        let hash = blake3::hash(data);
+        self.append_leaf(hash);
+    }
+
+    // 构建更高层节点（山峰）
+    fn build_peaks(&mut self) {
+        // 从第0层开始向上构建
+        for level in 0..self.max_height {
+            let current_level_size = self.layers[level].len();
+
+            // 如果当前层有偶数个节点，则构建上一层新节点
+            if current_level_size >= 2 && current_level_size % 2 == 0 {
+                // 获取最后两个节点
+                let left_child = self.layers[level][current_level_size - 2];
+                let right_child = self.layers[level][current_level_size - 1];
+
+                // 计算父节点哈希值
+                let parent_hash = self.hash_nodes(left_child, right_child);
+
+                // 将父节点添加到上一层
+                self.layers[level + 1].push(parent_hash);
+            } else {
+                // 如果当前层没有足够的节点构建父节点，说明已到达最高层，需跳出循环
+                break;
+            }
+        }
+    }
+
+    // 使用Blake3计算两个节点上供后形成的父节点的哈希值
+    fn hash_nodes(&self, left: Hash, right: Hash) -> Hash {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(left.as_bytes());
+        hasher.update(right.as_bytes());
+        hasher.finalize()
+    }
+
+    // 获取指定层级的节点
+    pub fn get_node(&self, level: usize, index: usize) -> Option<Hash> {
+        if level > self.max_height {
+            return None; // 超出最大高度
+        }
+
+        if index < self.layers[level].len() {
+            Some(self.layers[level][index])
+        } else {
+            None
+        }
+    }
+
+    // 获取指定层级的所有节点
+    pub fn get_level(&self, level: usize) -> Option<&Vec<Hash>> {
+        if level > self.max_height {
+            return None; // 超出最大高度
+        }
+
+        Some(&self.layers[level])
+    }
+
+    // 获取MMR的根节点（如果存在）
+    pub fn get_root(&self) -> Option<Hash> {
+        // 从最高层开始，找到第一个非空层，返回其最后一个节点
+        let mut peak: Vec<&Hash> = Vec::new();
+        if !self.layers[0].is_empty() {
+            for level in 0..self.max_height {
+                if self.layers[level].len() % 2 == 1 {
+                    peak.push(self.layers[level].last().unwrap());
+                }
+            }
+            println!("peak: {:?}", peak);
+            let mut root = peak[0].clone();
+            for i in 1..peak.len() {
+                root = self.hash_nodes(root, peak[i].clone());
+            }
+            return Some(root);
+        }
+        None
+    }
+
+    // 生成指定叶子节点的包含证明（返回构建证明所需的哈希值）
+    pub fn generate_proof(&self, leaf_index: usize) -> Option<Vec<Hash>> {
+        if leaf_index >= self.layers[0].len() {
+            return None; // 索引超出范围
+        }
+
+
+        let mut proof = Vec::new();
+        let mut current_index = leaf_index + 1;
+
+        // 从叶子层开始向上构建证明
+        for level in 0..self.max_height {
+            // 确定兄弟节点的索引
+            let sibling_index = if current_index % 2 == 0 {
+                // 如果是右子节点(偶数索引)，兄弟在左边
+                if current_index > 0 {
+                    current_index - 1
+                } else {
+                    // 如果是索引0，没有左兄弟，这种情况下我们可能在一个山峰的边缘
+                    break;
+                }
+            } else {
+                // 如果是左子节点(奇数索引)，兄弟在右边
+                current_index + 1
+            };
+            // 检查兄弟节点是否存在
+            if sibling_index <= self.layers[level].len() {
+                proof.push(self.layers[level][sibling_index - 1]);
+            } else {
+                // 如果没有兄弟节点，当前节点可能是山峰的一部分
+                break;
+            }
+
+            // 计算父节点的索引
+            current_index = if current_index % 2 == 0 {
+                current_index / 2
+            } else {
+                (current_index + 1) / 2
+            };
+        }
+
+        Some(proof)
+    }
+
+    // 验证包含证明
+    pub fn verify_proof(
+        &self,
+        leaf_index: i32,
+        leaf_hash: Hash,
+        proof: &[Hash],
+        peaks: &[Hash],
+        root: Hash,
+    ) -> bool {
+        let mut current_hash = leaf_hash;
+        let mut current_root: Hash = peaks[0].clone();
+        let mut index = leaf_index + 1;
+        for &sibling_hash in proof {
+            // 确定当前哈希值和兄弟哈希值的顺序
+            // 假设较小的哈希值在左边
+            let (left, right) = if index % 2 == 1 {
+                (current_hash, sibling_hash)
+            } else {
+                (sibling_hash, current_hash)
+            };
+            index = if index % 2 == 1 {
+                (index + 1) / 2
+            } else {
+                index / 2
+            };
+            // 计算父节点哈希值
+
+            current_hash = self.hash_nodes(left, right);
+        }
+        for i in 1..peaks.len() {
+            current_root = self.hash_nodes(current_root, peaks[i].clone());
+        }
+
+        // 验证最终哈希值是否与根哈希值匹配
+        peaks.contains(&current_hash) && root == current_root
+    }
+
+    // 打印MMR结构，用于调试
+    pub fn print_tree(&self) {
+        println!("Merkle Mountain Range:");
+        for level in 0..self.max_height {
+            if !self.layers[level].is_empty() {
+                print!("Level {}: ", level);
+                for (idx, hash) in self.layers[level].iter().enumerate() {
+                    // 使用Hash的as_bytes方法，只显示前8个字节的十六进制表示
+                    let hash_str = hex::encode(&hash.as_bytes()[0..4]);
+                    print!("{}#{}: {} ", level, idx, hash_str);
+                }
+                println!();
+            }
+        }
+    }
+
+    fn get_peak_hash(&self) -> Option<Vec<Hash>> {
+        let mut peak: Vec<Hash> = Vec::new();
+        if !self.layers[0].is_empty() {
+            for level in 0..self.max_height {
+                if self.layers[level].len() % 2 == 1 {
+                    peak.push(self.layers[level].last().unwrap().clone());
+                }
+            }
+            return Some(peak);
+        }
+        None
+    }
+}
+
+// 示例用法
+fn main() {
+    // 创建一个最大高度为9的MMR
+    let mut mmr = MerkleMountainRange::new(9);
+
+    // 添加一些叶子节点
+    for i in 1..16 {
+        let v = i.to_string();
+        let data = v.as_bytes();
+        mmr.append_data(data);
+    }
+
+    // 打印MMR结构
+    mmr.print_tree();
+
+    // 获取根节点
+    if let Some(root) = mmr.get_root() {
+        println!("Root: {}", hex::encode(&root.as_bytes()[0..8])); // 显示更多位数
+    }
+
+    // 生成第N个叶子节点的包含证明
+    let leaf_index = 5;
+    if let Some(proof) = mmr.generate_proof(leaf_index) {
+        println!("Proof for leaf {}:", leaf_index);
+        for (i, hash) in proof.iter().enumerate() {
+            println!("Proof item {}: {}", i, hex::encode(&hash.as_bytes()[0..4]));
+        }
+        let peaks = mmr.get_peak_hash().unwrap();
+        // 验证证明
+        let leaf_hash = mmr.get_node(0, leaf_index).unwrap();
+        let root = mmr.get_root().unwrap();
+        let is_valid = mmr.verify_proof(leaf_index as i32, leaf_hash, &proof, &peaks, root);
+        println!(
+            "Proof verification: {}",
+            if is_valid { "Valid" } else { "Invalid" }
+        );
+    }
+}
