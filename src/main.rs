@@ -113,39 +113,24 @@ impl MerkleMountainRange {
             return None; // 索引超出范围
         }
 
-
         let mut proof = Vec::new();
-        let mut current_index = leaf_index + 1;
+        let mut current_index = leaf_index;
 
         // 从叶子层开始向上构建证明
         for level in 0..self.max_height {
-            // 确定兄弟节点的索引
-            let sibling_index = if current_index % 2 == 0 {
-                // 如果是右子节点(偶数索引)，兄弟在左边
-                if current_index > 0 {
-                    current_index - 1
-                } else {
-                    // 如果是索引0，没有左兄弟，这种情况下我们可能在一个山峰的边缘
-                    break;
-                }
-            } else {
-                // 如果是左子节点(奇数索引)，兄弟在右边
-                current_index + 1
-            };
-            // 检查兄弟节点是否存在
-            if sibling_index <= self.layers[level].len() {
-                proof.push(self.layers[level][sibling_index - 1]);
-            } else {
-                // 如果没有兄弟节点，当前节点可能是山峰的一部分
+            // 若当前索引对应本层的peak节点，则退出循环
+            if current_index == self.layers[level].len() - 1 && current_index % 2 == 0 {
                 break;
             }
-
-            // 计算父节点的索引
-            current_index = if current_index % 2 == 0 {
-                current_index / 2
+            // 确定兄弟节点的索引，要么在左边，要么在右边
+            let sibling_index = if current_index % 2 == 0 {
+                current_index + 1
             } else {
-                (current_index + 1) / 2
+                current_index - 1
             };
+            proof.push(self.layers[level][sibling_index]);
+            // 计算父节点的索引
+            current_index = current_index / 2;
         }
 
         Some(proof)
@@ -162,28 +147,23 @@ impl MerkleMountainRange {
     ) -> bool {
         let mut current_hash = leaf_hash;
         let mut current_root: Hash = peaks[0].clone();
-        let mut index = leaf_index + 1;
+        let mut index = leaf_index;
         for &sibling_hash in proof {
             // 确定当前哈希值和兄弟哈希值的顺序
             // 假设较小的哈希值在左边
-            let (left, right) = if index % 2 == 1 {
+            let (left, right) = if index % 2 == 0 {
                 (current_hash, sibling_hash)
             } else {
                 (sibling_hash, current_hash)
             };
-            index = if index % 2 == 1 {
-                (index + 1) / 2
-            } else {
-                index / 2
-            };
-            // 计算父节点哈希值
 
+            // 计算父节点的索引与哈希值
+            index = index / 2;
             current_hash = self.hash_nodes(left, right);
         }
         for i in 1..peaks.len() {
             current_root = self.hash_nodes(current_root, peaks[i].clone());
         }
-
         // 验证最终哈希值是否与根哈希值匹配
         peaks.contains(&current_hash) && root == current_root
     }
