@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 blake3 = "1.8.2"
 hex = "0.4.3"
+alloy = "0.15.6"

@@ -1,21 +1,44 @@
+use alloy::primitives::keccak256;
 use blake3::Hash;
+
+enum HashType {
+    Keccak256,
+    Blake3,
+}
 
 struct MerkleMountainRange {
     // 存储各层节点
     layers: Vec<Vec<Hash>>,
     // 最大层数
     max_height: usize,
+    // 哈希算法
+    hash_type: HashType,
 }
 
 impl MerkleMountainRange {
     // 创建新的MMR，指定最大高度
-    pub fn new(max_height: usize) -> Self {
+    pub fn new(max_height: usize, hash_type: HashType) -> Self {
         // 创建max_height
         let mut layers = Vec::with_capacity(max_height);
         for _ in 0..max_height {
             layers.push(Vec::new());
         }
-        MerkleMountainRange { layers, max_height }
+        MerkleMountainRange { layers, max_height, hash_type}
+    }
+
+    pub fn compute_hash(&self, data: &[u8]) -> Hash {
+        match self.hash_type {
+            HashType::Keccak256 => {
+                let hash = keccak256(data);
+                let bytes: [u8; 32] = hash.into();
+                Hash::from(bytes)
+            },
+            HashType::Blake3 => {
+                let mut hasher = blake3::Hasher::new();
+                hasher.update(data);
+                hasher.finalize()
+            }
+        }
     }
 
     // 向MMR添加叶子节点哈希值
@@ -29,7 +52,7 @@ impl MerkleMountainRange {
 
     // 向MMR添加叶子节点（含原始数据）
     pub fn append_data(&mut self, data: &[u8]) {
-        let hash = blake3::hash(data);
+        let hash = self.compute_hash(data);
         self.append_leaf(hash);
     }
 
@@ -46,7 +69,7 @@ impl MerkleMountainRange {
                 let right_child = self.layers[level][current_level_size - 1];
 
                 // 计算父节点哈希值
-                let parent_hash = self.hash_nodes(left_child, right_child);
+                let parent_hash = self.hash_node_pair(left_child, right_child);
 
                 // 将父节点添加到上一层
                 self.layers[level + 1].push(parent_hash);
@@ -57,12 +80,14 @@ impl MerkleMountainRange {
         }
     }
 
-    // 使用Blake3计算两个节点上供后形成的父节点的哈希值
-    fn hash_nodes(&self, left: Hash, right: Hash) -> Hash {
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(left.as_bytes());
-        hasher.update(right.as_bytes());
-        hasher.finalize()
+    // 计算两个节点上供后形成的父节点的哈希值
+    fn hash_node_pair(&self, left: Hash, right: Hash) -> Hash {
+        // 预分配固定大小数组（64字节 = 32 + 32）
+        let mut combined = [0u8; 64];
+        combined[..32].copy_from_slice(left.as_bytes());
+        combined[32..].copy_from_slice(right.as_bytes());
+
+        self.compute_hash(&combined)
     }
 
     // 获取指定层级的节点
@@ -105,7 +130,7 @@ impl MerkleMountainRange {
             );
             let mut root = peak[0].clone();
             for i in 1..peak.len() {
-                root = self.hash_nodes(root, peak[i].clone());
+                root = self.hash_node_pair(root, peak[i].clone());
             }
             return Some(root);
         }
@@ -163,10 +188,10 @@ impl MerkleMountainRange {
 
             // 计算父节点的索引与哈希值
             current_index = current_index / 2;
-            current_hash = self.hash_nodes(left, right);
+            current_hash = self.hash_node_pair(left, right);
         }
         for i in 1..peaks.len() {
-            current_root = self.hash_nodes(current_root, peaks[i].clone());
+            current_root = self.hash_node_pair(current_root, peaks[i].clone());
         }
         // 验证最终哈希值是否与根哈希值匹配
         peaks.contains(&current_hash) && root == current_root
@@ -205,7 +230,7 @@ impl MerkleMountainRange {
 // 示例用法
 fn main() {
     // 创建一个最大高度为9的MMR
-    let mut mmr = MerkleMountainRange::new(9);
+    let mut mmr = MerkleMountainRange::new(9, HashType::Blake3);
 
     // 添加一些叶子节点
     for i in 1..16 {
