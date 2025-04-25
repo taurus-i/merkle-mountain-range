@@ -23,7 +23,11 @@ impl MerkleMountainRange {
         for _ in 0..max_height {
             layers.push(Vec::new());
         }
-        MerkleMountainRange { layers, max_height, hash_type}
+        MerkleMountainRange {
+            layers,
+            max_height,
+            hash_type,
+        }
     }
 
     pub fn compute_hash(&self, data: &[u8]) -> Hash {
@@ -32,7 +36,7 @@ impl MerkleMountainRange {
                 let hash = keccak256(data);
                 let bytes: [u8; 32] = hash.into();
                 Hash::from(bytes)
-            },
+            }
             HashType::Blake3 => {
                 let mut hasher = blake3::Hasher::new();
                 hasher.update(data);
@@ -92,8 +96,9 @@ impl MerkleMountainRange {
 
     // 获取指定层级的节点
     pub fn get_node(&self, level: usize, index: usize) -> Option<Hash> {
+        // 超出最大高度
         if level > self.max_height {
-            return None; // 超出最大高度
+            return None;
         }
 
         if index < self.layers[level].len() {
@@ -105,15 +110,16 @@ impl MerkleMountainRange {
 
     // 获取指定层级的所有节点
     pub fn get_level(&self, level: usize) -> Option<&Vec<Hash>> {
+        // 超出最大高度
         if level > self.max_height {
-            return None; // 超出最大高度
+            return None;
         }
 
         Some(&self.layers[level])
     }
 
     // 获取MMR的根节点（如果存在）
-    pub fn get_root(&self) -> Option<Hash> {
+    pub fn compute_root(&self) -> Option<Hash> {
         // 从最高层开始，找到第一个非空层，返回其最后一个节点
         let mut peak: Vec<&Hash> = Vec::new();
         if !self.layers[0].is_empty() {
@@ -139,8 +145,9 @@ impl MerkleMountainRange {
 
     // 生成指定叶子节点的包含证明（返回构建证明所需的哈希值）
     pub fn generate_proof(&self, leaf_index: usize) -> Option<Vec<Hash>> {
+        // 索引超出范围
         if leaf_index >= self.layers[0].len() {
-            return None; // 索引超出范围
+            return None;
         }
 
         let mut proof = Vec::new();
@@ -172,10 +179,10 @@ impl MerkleMountainRange {
         root: Hash,
         peaks: &[Hash],
         proof: &[Hash],
-        leaf_hash: Hash,
+        leaf: Hash,
         leaf_index: i32,
     ) -> bool {
-        let mut current_hash = leaf_hash;
+        let mut current_hash = leaf;
         let mut current_root: Hash = peaks[0].clone();
         let mut current_index = leaf_index;
         for &sibling_hash in proof {
@@ -243,7 +250,7 @@ fn main() {
     mmr.print_tree();
 
     // 获取根节点
-    if let Some(root) = mmr.get_root() {
+    if let Some(root) = mmr.compute_root() {
         println!("Root: {}", hex::encode(&root.as_bytes()[0..6]));
     }
 
@@ -256,9 +263,9 @@ fn main() {
         }
         let peaks = mmr.get_peak_hash().unwrap();
         // 验证证明
-        let leaf_hash = mmr.get_node(0, leaf_index).unwrap();
-        let root = mmr.get_root().unwrap();
-        let is_valid = mmr.verify_proof(root, &peaks, &proof, leaf_hash, leaf_index as i32);
+        let leaf = mmr.get_node(0, leaf_index).unwrap();
+        let root = mmr.compute_root().unwrap();
+        let is_valid = mmr.verify_proof(root, &peaks, &proof, leaf, leaf_index as i32);
         println!(
             "Proof verification: {}",
             if is_valid { "Valid" } else { "Invalid" }
