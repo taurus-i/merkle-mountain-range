@@ -45,6 +45,15 @@ impl MerkleMountainRange {
         }
     }
 
+    pub fn top_level(&self) -> Option<u32> {
+        let n = self.layers[0].len();
+        if n == 0 {
+            None
+        } else {
+            Some(usize::BITS - n.leading_zeros() - 1)
+        }
+    }
+
     // 向MMR添加叶子节点哈希值
     pub fn append_leaf(&mut self, hash: Hash) {
         // 将叶子节点哈希值添加到第0层
@@ -206,7 +215,10 @@ impl MerkleMountainRange {
 
     // 打印MMR结构，用于调试
     pub fn print_tree(&self) {
-        println!("Merkle Mountain Range:");
+        println!(
+            "Merkle Mountain Range With Top Level: {:?}",
+            self.top_level()
+        );
         for level in 0..self.max_height {
             if !self.layers[level].is_empty() {
                 print!("Level {}: ", level);
