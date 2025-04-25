@@ -36,5 +36,7 @@ fn main() {
             "Proof verification: {}",
             if is_valid { "Valid" } else { "Invalid" }
         );
+
+        println!("{}", mmr.generate_svg4());
     }
 }

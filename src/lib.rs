@@ -244,4 +244,297 @@ impl MerkleMountainRange {
         }
         None
     }
+
+    // 生成 SVG 图，显示每一层节点及父子连线
+    pub fn generate_svg(&self) -> String {
+        // 配置常量：节点半径、水平和垂直间距、画布边距
+        let node_radius = 10.0;
+        let h_spacing = 50.0;
+        let v_spacing = 70.0;
+        let margin = 20.0;
+
+        // 计算画布宽高：以第 0 层最大节点数为基准
+        let max_nodes = self.layers.get(0).map(|lvl| lvl.len()).unwrap_or(0);
+        let width = margin * 2.0 + (max_nodes as f32 - 1.0) * h_spacing + node_radius * 2.0;
+        let height = margin * 2.0 + (self.max_height as f32 - 1.0) * v_spacing + node_radius * 2.0;
+
+        // SVG 头部
+        let mut svg = String::new();
+        svg.push_str(&format!(
+            r#"<svg width="{:.0}" height="{:.0}" xmlns="http://www.w3.org/2000/svg">"#,
+            width, height
+        ));
+
+        // 用于存储每个节点的中心坐标，便于后面连线查找
+        let mut coords: Vec<Vec<(f32, f32)>> = Vec::with_capacity(self.max_height);
+
+        // 1. 绘制所有节点，并记录坐标
+        for (level, layer) in self.layers.iter().enumerate() {
+            let y = margin + level as f32 * v_spacing + node_radius;
+            let mut row_coords = Vec::with_capacity(layer.len());
+            for (i, _hash) in layer.iter().enumerate() {
+                // x 坐标：以水平间距均匀分布
+                let x = margin + i as f32 * h_spacing + node_radius;
+                // 圆形节点
+                svg.push_str(&format!(
+                    r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="lightblue" stroke="black" />"#,
+                    x, y, node_radius
+                ));
+                row_coords.push((x, y));
+            }
+            coords.push(row_coords);
+        }
+
+        // 2. 绘制父子连线
+        for (level, layer) in self.layers.iter().enumerate() {
+            // 最底层或超出范围则跳过
+            if level + 1 >= self.layers.len() {
+                break;
+            }
+            let next = &coords[level + 1];
+            for (i, _hash) in layer.iter().enumerate() {
+                // 只有偶数索引且下一个兄弟存在时才有父节点
+                if i % 2 == 0 && i + 1 < layer.len() {
+                    let child_pos = coords[level][i];
+                    // 父节点索引 = i / 2
+                    let parent_pos = next[i / 2];
+                    // 从左子到父
+                    svg.push_str(&format!(
+                        r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="gray" />"#,
+                        child_pos.0, child_pos.1, parent_pos.0, parent_pos.1
+                    ));
+                    // 从右子到父
+                    let right_child = coords[level][i + 1];
+                    svg.push_str(&format!(
+                        r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="gray" />"#,
+                        right_child.0, right_child.1, parent_pos.0, parent_pos.1
+                    ));
+                }
+            }
+        }
+
+        // 关闭 SVG
+        svg.push_str("</svg>");
+        svg
+    }
+
+    // 生成 SVG 图，底层第 0 层在最底部，从下往上绘制
+    pub fn generate_svg2(&self) -> String {
+        // 配置常量：节点半径、水平和垂直间距、画布边距
+        let node_radius = 10.0;
+        let h_spacing = 50.0;
+        let v_spacing = 70.0;
+        let margin = 20.0;
+
+        // 总层数
+        let total_layers = self.layers.len();
+        // 以第 0 层节点数计算画布宽度
+        let max_nodes = self.layers.get(0).map(|lvl| lvl.len()).unwrap_or(0);
+        let width = margin * 2.0 + (max_nodes as f32 - 1.0) * h_spacing + node_radius * 2.0;
+        // 以层数计算画布高度
+        let height = margin * 2.0 + ((total_layers as f32 - 1.0) * v_spacing) + node_radius * 2.0;
+
+        // SVG 头部
+        let mut svg = String::new();
+        svg.push_str(&format!(
+            r#"<svg width="{:.0}" height="{:.0}" xmlns="http://www.w3.org/2000/svg">"#,
+            width, height
+        ));
+
+        // 存储节点坐标
+        let mut coords: Vec<Vec<(f32, f32)>> = Vec::with_capacity(total_layers);
+
+        // 绘制节点（从下往上）
+        for (level, layer) in self.layers.iter().enumerate() {
+            let y = margin + ((total_layers - 1 - level) as f32) * v_spacing + node_radius;
+            let mut row = Vec::with_capacity(layer.len());
+            for (i, _hash) in layer.iter().enumerate() {
+                let x = margin + i as f32 * h_spacing + node_radius;
+                svg.push_str(&format!(
+                    r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="lightblue" stroke="black" />"#,
+                    x, y, node_radius
+                ));
+                row.push((x, y));
+            }
+            coords.push(row);
+        }
+
+        // 绘制父子连线
+        for (level, layer) in self.layers.iter().enumerate() {
+            if level + 1 >= coords.len() {
+                break;
+            }
+            let next = &coords[level + 1];
+            for i in (0..layer.len()).step_by(2) {
+                if i + 1 < layer.len() {
+                    let left = coords[level][i];
+                    let right = coords[level][i + 1];
+                    let parent = next[i / 2];
+                    svg.push_str(&format!(
+                        r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="gray" />"#,
+                        left.0, left.1, parent.0, parent.1
+                    ));
+                    svg.push_str(&format!(
+                        r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="gray" />"#,
+                        right.0, right.1, parent.0, parent.1
+                    ));
+                }
+            }
+        }
+
+        // 关闭 SVG
+        svg.push_str("</svg>");
+        svg
+    }
+
+    // 生成 SVG 图，底层第 0 层在最底部，从下往上绘制，各层节点水平居中
+    pub fn generate_svg3(&self) -> String {
+        // 配置常量：节点半径、水平和垂直间距、画布边距
+        let node_radius = 10.0;
+        let h_spacing = 50.0;
+        let v_spacing = 70.0;
+        let margin = 20.0;
+
+        // 总层数
+        let total_layers = self.layers.len();
+        // 以第 0 层最大节点数计算画布宽度
+        let max_nodes = self.layers.get(0).map(|lvl| lvl.len()).unwrap_or(0);
+        let width = margin * 2.0 + (max_nodes as f32 - 1.0) * h_spacing + node_radius * 2.0;
+        // 以层数计算画布高度
+        let height = margin * 2.0 + ((total_layers as f32 - 1.0) * v_spacing) + node_radius * 2.0;
+
+        // SVG 头部
+        let mut svg = String::new();
+        svg.push_str(&format!(
+            r#"<svg width="{:.0}" height="{:.0}" xmlns="http://www.w3.org/2000/svg">"#,
+            width, height
+        ));
+
+        // 存储节点坐标
+        let mut coords: Vec<Vec<(f32, f32)>> = Vec::with_capacity(total_layers);
+
+        // 绘制节点（从下往上），且每层水平居中
+        for (level, layer) in self.layers.iter().enumerate() {
+            let y = margin + ((total_layers - 1 - level) as f32) * v_spacing + node_radius;
+            let layer_len = layer.len() as f32;
+            // 计算当前层起始 x，使节点水平居中
+            let x_start = margin + node_radius + ((max_nodes as f32 - layer_len) * h_spacing / 2.0);
+            let mut row = Vec::with_capacity(layer.len());
+            for (i, _hash) in layer.iter().enumerate() {
+                let x = x_start + i as f32 * h_spacing;
+                svg.push_str(&format!(
+                    r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="lightblue" stroke="black" />"#,
+                    x, y, node_radius
+                ));
+                row.push((x, y));
+            }
+            coords.push(row);
+        }
+
+        // 绘制父子连线
+        for (level, layer) in self.layers.iter().enumerate() {
+            if level + 1 >= coords.len() {
+                break;
+            }
+            let next = &coords[level + 1];
+            for i in (0..layer.len()).step_by(2) {
+                if i + 1 < layer.len() {
+                    let left = coords[level][i];
+                    let right = coords[level][i + 1];
+                    let parent = next[i / 2];
+                    svg.push_str(&format!(
+                        r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="gray" />"#,
+                        left.0, left.1, parent.0, parent.1
+                    ));
+                    svg.push_str(&format!(
+                        r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="gray" />"#,
+                        right.0, right.1, parent.0, parent.1
+                    ));
+                }
+            }
+        }
+
+        // 关闭 SVG
+        svg.push_str("</svg>");
+        svg
+    }
+
+    // 生成 SVG 图，底层第 0 层在最底部，从下往上绘制，父节点位于左右子节点连线的正上方
+    pub fn generate_svg4(&self) -> String {
+        // 常量配置：节点半径、水平与垂直间距、画布边距
+        let node_radius = 10.0;
+        let h_spacing = 50.0;
+        let v_spacing = 70.0;
+        let margin = 20.0;
+
+        // 层数与最大节点数（第0层）
+        let total_layers = self.layers.len();
+        let max_nodes = self.layers.get(0).map(|lvl| lvl.len()).unwrap_or(0);
+
+        // 画布尺寸
+        let width = margin * 2.0 + (max_nodes as f32 - 1.0) * h_spacing + node_radius * 2.0;
+        let height = margin * 2.0 + ((total_layers as f32 - 1.0) * v_spacing) + node_radius * 2.0;
+
+        // SVG 开始
+        let mut svg = String::new();
+        svg.push_str(&format!(
+            r#"<svg width="{:.0}" height="{:.0}" xmlns="http://www.w3.org/2000/svg">"#,
+            width, height
+        ));
+
+        // 存储各层坐标
+        let mut coords: Vec<Vec<(f32, f32)>> = vec![Vec::new(); total_layers];
+
+        // 第0层节点：水平居中
+        let y0 = margin + ((total_layers - 1) as f32) * v_spacing + node_radius;
+        let layer0_len = self.layers[0].len() as f32;
+        let x_start0 = margin + node_radius + ((max_nodes as f32 - layer0_len) * h_spacing / 2.0);
+        for (i, _hash) in self.layers[0].iter().enumerate() {
+            let x = x_start0 + i as f32 * h_spacing;
+            // 画节点
+            svg.push_str(&format!(
+                r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="lightblue" stroke="black" />"#,
+                x, y0, node_radius
+            ));
+            coords[0].push((x, y0));
+        }
+
+        // 高层节点：依据子节点连线中点定位
+        for level in 1..total_layers {
+            let y = margin + ((total_layers - 1 - level) as f32) * v_spacing + node_radius;
+            for j in 0..self.layers[level].len() {
+                // 取下方两子节点
+                let left = coords[level - 1][2 * j];
+                let right = coords[level - 1][2 * j + 1];
+                // 计算中点
+                let x = (left.0 + right.0) / 2.0;
+                svg.push_str(&format!(
+                    r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="lightblue" stroke="black" />"#,
+                    x, y, node_radius
+                ));
+                coords[level].push((x, y));
+            }
+        }
+
+        // 父子连线：从每层到上一层
+        for level in 1..total_layers {
+            for j in 0..self.layers[level].len() {
+                let parent = coords[level][j];
+                let left = coords[level - 1][2 * j];
+                let right = coords[level - 1][2 * j + 1];
+                svg.push_str(&format!(
+                    r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="gray" />"#,
+                    left.0, left.1, parent.0, parent.1
+                ));
+                svg.push_str(&format!(
+                    r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="gray" />"#,
+                    right.0, right.1, parent.0, parent.1
+                ));
+            }
+        }
+
+        // 结束 SVG
+        svg.push_str("</svg>");
+        svg
+    }
 }
