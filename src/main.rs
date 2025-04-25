@@ -97,7 +97,12 @@ impl MerkleMountainRange {
                     peak.push(self.layers[level].last().unwrap());
                 }
             }
-            println!("peak: {:?}", peak);
+            println!(
+                "peak: {:?}",
+                peak.iter()
+                    .map(|hash| hex::encode(&hash.as_bytes()[0..6]))
+                    .collect::<Vec<_>>()
+            );
             let mut root = peak[0].clone();
             for i in 1..peak.len() {
                 root = self.hash_nodes(root, peak[i].clone());
@@ -139,26 +144,25 @@ impl MerkleMountainRange {
     // 验证包含证明
     pub fn verify_proof(
         &self,
-        leaf_index: i32,
-        leaf_hash: Hash,
-        proof: &[Hash],
-        peaks: &[Hash],
         root: Hash,
+        peaks: &[Hash],
+        proof: &[Hash],
+        leaf_hash: Hash,
+        leaf_index: i32,
     ) -> bool {
         let mut current_hash = leaf_hash;
         let mut current_root: Hash = peaks[0].clone();
-        let mut index = leaf_index;
+        let mut current_index = leaf_index;
         for &sibling_hash in proof {
-            // 确定当前哈希值和兄弟哈希值的顺序
-            // 假设较小的哈希值在左边
-            let (left, right) = if index % 2 == 0 {
+            // 确定与兄弟哈希值之间的顺序
+            let (left, right) = if current_index % 2 == 0 {
                 (current_hash, sibling_hash)
             } else {
                 (sibling_hash, current_hash)
             };
 
             // 计算父节点的索引与哈希值
-            index = index / 2;
+            current_index = current_index / 2;
             current_hash = self.hash_nodes(left, right);
         }
         for i in 1..peaks.len() {
@@ -175,8 +179,8 @@ impl MerkleMountainRange {
             if !self.layers[level].is_empty() {
                 print!("Level {}: ", level);
                 for (idx, hash) in self.layers[level].iter().enumerate() {
-                    // 使用Hash的as_bytes方法，只显示前8个字节的十六进制表示
-                    let hash_str = hex::encode(&hash.as_bytes()[0..4]);
+                    // 只显示前N个字节的十六进制表示
+                    let hash_str = hex::encode(&hash.as_bytes()[0..6]);
                     print!("{}#{}: {} ", level, idx, hash_str);
                 }
                 println!();
@@ -215,7 +219,7 @@ fn main() {
 
     // 获取根节点
     if let Some(root) = mmr.get_root() {
-        println!("Root: {}", hex::encode(&root.as_bytes()[0..8])); // 显示更多位数
+        println!("Root: {}", hex::encode(&root.as_bytes()[0..6]));
     }
 
     // 生成第N个叶子节点的包含证明
@@ -223,13 +227,13 @@ fn main() {
     if let Some(proof) = mmr.generate_proof(leaf_index) {
         println!("Proof for leaf {}:", leaf_index);
         for (i, hash) in proof.iter().enumerate() {
-            println!("Proof item {}: {}", i, hex::encode(&hash.as_bytes()[0..4]));
+            println!("Proof item {}: {}", i, hex::encode(&hash.as_bytes()[0..6]));
         }
         let peaks = mmr.get_peak_hash().unwrap();
         // 验证证明
         let leaf_hash = mmr.get_node(0, leaf_index).unwrap();
         let root = mmr.get_root().unwrap();
-        let is_valid = mmr.verify_proof(leaf_index as i32, leaf_hash, &proof, &peaks, root);
+        let is_valid = mmr.verify_proof(root, &peaks, &proof, leaf_hash, leaf_index as i32);
         println!(
             "Proof verification: {}",
             if is_valid { "Valid" } else { "Invalid" }
