@@ -1,10 +1,16 @@
 [package]
 name = "merkle-mountain-range"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
 blake3 = "1.8.2"
 hex = "0.4.3"
 alloy = "0.15.6"
 # libm = "0.2.13"
+wasm-bindgen = "0.2.100"
+getrandom = { version = "0.2", features = ["js"] }
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "merkle_mountain_range"
