@@ -468,7 +468,7 @@ impl MerkleMountainRange {
         let margin = 20.0;
 
         // 层数与最大节点数（第0层）
-        let total_layers = self.top_level().unwrap();
+        let total_layers = self.top_level().unwrap() + 1;
         let layer0_nodes = self.layers[0].len();
 
         println!("max_nodes: {}", layer0_nodes);
@@ -493,9 +493,17 @@ impl MerkleMountainRange {
         for (i, _hash) in self.layers[0].iter().enumerate() {
             let x_i = x_0 + i as f32 * h_spacing;
             // 画节点
+            // 通过条件判断选择颜色参数
+            let (fill_color, stroke_color) = if i % 2 == 0 && i == self.layers[0].len() - 1 {
+                ("black", "red")
+            } else {
+                ("lightblue", "black")
+            };
+
+            // 统一格式化调用
             svg.push_str(&format!(
-                r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="lightblue" stroke="black" />"#,
-                x_i, y_0, node_radius
+                r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="{}" stroke="{}" />"#,
+                x_i, y_0, node_radius, fill_color, stroke_color
             ));
             coords[0].push((x_i, y_0));
         }
@@ -509,12 +517,28 @@ impl MerkleMountainRange {
                 let right = coords[level - 1][2 * j + 1];
                 // 计算中点
                 let x = (left.0 + right.0) / 2.0;
+                // 条件判断选择颜色参数
+                let (fill_color, stroke_color) = if j % 2 == 0 && j == self.layers[level].len() - 1
+                {
+                    ("black", "red")
+                } else {
+                    ("lightblue", "black")
+                };
+
+                // 统一格式化调用
                 svg.push_str(&format!(
-                    r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="lightblue" stroke="black" />"#,
-                    x, y, node_radius
+                    r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="{}" stroke="{}" />"#,
+                    x, y, node_radius, fill_color, stroke_color
                 ));
                 coords[level].push((x, y));
             }
+        }
+
+        fn add_line(svg: &mut String, from: (f32, f32), to: (f32, f32)) {
+            svg.push_str(&format!(
+                r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="gray" />"#,
+                from.0, from.1, to.0, to.1
+            ));
         }
 
         // 父子连线：从每层到上一层
@@ -523,14 +547,8 @@ impl MerkleMountainRange {
                 let parent = coords[level][j];
                 let left = coords[level - 1][2 * j];
                 let right = coords[level - 1][2 * j + 1];
-                svg.push_str(&format!(
-                    r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="gray" />"#,
-                    left.0, left.1, parent.0, parent.1
-                ));
-                svg.push_str(&format!(
-                    r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="gray" />"#,
-                    right.0, right.1, parent.0, parent.1
-                ));
+                add_line(&mut svg, left, parent);
+                add_line(&mut svg, right, parent);
             }
         }
 
