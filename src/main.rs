@@ -1,4 +1,5 @@
 use merkle_mountain_range::{HashType, MerkleMountainRange};
+use std::fs;
 
 // 示例用法
 fn main() {
@@ -37,6 +38,9 @@ fn main() {
             if is_valid { "Valid" } else { "Invalid" }
         );
 
-        println!("{}", mmr.generate_svg4());
+        // println!("{}", mmr.generate_svg4());
+        let path = ".mmr.svg";
+        let content = mmr.generate_svg4();
+        fs::write(path, content.as_str()).unwrap();
     }
 }

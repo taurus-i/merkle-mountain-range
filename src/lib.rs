@@ -45,12 +45,12 @@ impl MerkleMountainRange {
         }
     }
 
-    pub fn top_level(&self) -> Option<u32> {
+    pub fn top_level(&self) -> Option<usize> {
         let n = self.layers[0].len();
         if n == 0 {
             None
         } else {
-            Some(usize::BITS - n.leading_zeros() - 1)
+            Some((usize::BITS - n.leading_zeros() - 1) as usize)
         }
     }
 
@@ -468,12 +468,14 @@ impl MerkleMountainRange {
         let margin = 20.0;
 
         // 层数与最大节点数（第0层）
-        let total_layers = self.layers.len();
-        let max_nodes = self.layers.get(0).map(|lvl| lvl.len()).unwrap_or(0);
+        let total_layers = self.top_level().unwrap();
+        let layer0_nodes = self.layers[0].len();
+
+        println!("max_nodes: {}", layer0_nodes);
 
         // 画布尺寸
-        let width = margin * 2.0 + (max_nodes as f32 - 1.0) * h_spacing + node_radius * 2.0;
-        let height = margin * 2.0 + ((total_layers as f32 - 1.0) * v_spacing) + node_radius * 2.0;
+        let width = margin * 2.0 + (layer0_nodes as f32 - 1.0) * h_spacing + node_radius * 2.0;
+        let height = margin * 2.0 + (total_layers as f32 - 1.0) * v_spacing + node_radius * 2.0;
 
         // SVG 开始
         let mut svg = String::new();
@@ -486,17 +488,16 @@ impl MerkleMountainRange {
         let mut coords: Vec<Vec<(f32, f32)>> = vec![Vec::new(); total_layers];
 
         // 第0层节点：水平居中
-        let y0 = margin + ((total_layers - 1) as f32) * v_spacing + node_radius;
-        let layer0_len = self.layers[0].len() as f32;
-        let x_start0 = margin + node_radius + ((max_nodes as f32 - layer0_len) * h_spacing / 2.0);
+        let x_0 = margin + node_radius;
+        let y_0 = margin + ((total_layers - 1) as f32) * v_spacing + node_radius;
         for (i, _hash) in self.layers[0].iter().enumerate() {
-            let x = x_start0 + i as f32 * h_spacing;
+            let x_i = x_0 + i as f32 * h_spacing;
             // 画节点
             svg.push_str(&format!(
                 r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="lightblue" stroke="black" />"#,
-                x, y0, node_radius
+                x_i, y_0, node_radius
             ));
-            coords[0].push((x, y0));
+            coords[0].push((x_i, y_0));
         }
 
         // 高层节点：依据子节点连线中点定位

@@ -2,6 +2,9 @@
 .DS_Store
 Thumbs.db
 
+# Ignore output svg file
+.*.svg
+
 # Ignore editor temporary files
 .vscode/
 .idea/
