@@ -40,7 +40,7 @@ fn main() {
 
         // println!("{}", mmr.generate_svg4());
         let path = ".mmr.svg";
-        let content = mmr.generate_svg4();
+        let content = mmr.generate_svg6();
         fs::write(path, content.as_str()).unwrap();
     }
 }

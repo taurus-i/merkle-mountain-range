@@ -556,4 +556,257 @@ impl MerkleMountainRange {
         svg.push_str("</svg>");
         svg
     }
+
+    pub fn generate_svg5(&self) -> String {
+        // 常量配置
+        let node_radius = 12.0;
+        let v_spacing = 90.0;
+        let margin = 40.0;
+        let font_size = 12.0;
+
+        // 层数与最大底层节点数
+        let total_layers = self.top_level().unwrap() + 1;
+        let layer0_nodes = self.layers[0].len();
+
+        // 固定画布宽度，高度动态
+        let fixed_width = 800.0;
+        let height = margin * 2.0 + (total_layers as f32 - 1.0) * v_spacing + node_radius * 2.0;
+
+        // 根据节点数动态调整水平间距
+        let available_width = fixed_width - margin * 2.0 - node_radius * 2.0;
+        let h_spacing = if layer0_nodes > 1 {
+            available_width / (layer0_nodes as f32 - 1.0)
+        } else {
+            0.0
+        };
+
+        // 最终确定画布宽度（防止单节点太小）
+        let width = if layer0_nodes > 1 {
+            fixed_width
+        } else {
+            margin * 2.0 + node_radius * 2.0
+        };
+
+        // SVG 开始
+        let mut svg = String::new();
+        svg.push_str(&format!(
+            r#"<svg width="{:.0}" height="{:.0}" xmlns="http://www.w3.org/2000/svg">"#,
+            width, height
+        ));
+
+        // 存储节点坐标
+        let mut coords: Vec<Vec<(f32, f32)>> = vec![Vec::new(); total_layers];
+
+        // 绘制第 0 层节点
+        let base_y = margin + (total_layers as f32 - 1.0) * v_spacing + node_radius;
+        for (i, _hash) in self.layers[0].iter().enumerate() {
+            let x = margin + node_radius + i as f32 * h_spacing;
+            let y = base_y;
+
+            svg.push_str(&draw_node(x, y, node_radius, "lightblue", "black"));
+            svg.push_str(&draw_label(x, y, 0, i, font_size));
+            coords[0].push((x, y));
+        }
+
+        // 绘制更高层节点
+        for level in 1..total_layers {
+            let y = margin + (total_layers as f32 - 1.0 - level as f32) * v_spacing + node_radius;
+            for j in 0..self.layers[level].len() {
+                let left_idx = 2 * j;
+                let right_idx = 2 * j + 1;
+                let (x, valid) = if right_idx < coords[level - 1].len() {
+                    // 正常两个子节点取中点
+                    let left = coords[level - 1][left_idx];
+                    let right = coords[level - 1][right_idx];
+                    (((left.0 + right.0) / 2.0), true)
+                } else {
+                    // 孤立节点直接继承左节点
+                    (coords[level - 1][left_idx].0, false)
+                };
+
+                let (fill_color, stroke_color) = if valid {
+                    ("lightgreen", "black")
+                } else {
+                    ("orange", "red") // 孤立节点用橙色高亮
+                };
+
+                svg.push_str(&draw_node(x, y, node_radius, fill_color, stroke_color));
+                svg.push_str(&draw_label(x, y, level, j, font_size));
+                coords[level].push((x, y));
+            }
+        }
+
+        // 画父子连线
+        for level in 1..total_layers {
+            for j in 0..self.layers[level].len() {
+                let parent = coords[level][j];
+                let left_idx = 2 * j;
+                let right_idx = 2 * j + 1;
+
+                let left = coords[level - 1][left_idx];
+                svg.push_str(&draw_line(left, parent));
+
+                if right_idx < coords[level - 1].len() {
+                    let right = coords[level - 1][right_idx];
+                    svg.push_str(&draw_line(right, parent));
+                }
+            }
+        }
+
+        svg.push_str("</svg>");
+        svg
+    }
+
+    pub fn generate_svg6(&self) -> String {
+        // 常量配置
+        let node_radius = 10.0;
+        let h_spacing = 50.0;
+        let v_spacing = 70.0;
+        let margin = 20.0;
+
+        // 层数与最大节点数（第0层）
+        let total_layers = self.top_level().unwrap() + 1;
+        let layer0_nodes = self.layers[0].len();
+
+        // 画布尺寸
+        let width = margin * 2.0 + (layer0_nodes as f32 - 1.0) * h_spacing + node_radius * 2.0;
+        let height = margin * 2.0 + (total_layers as f32 - 1.0) * v_spacing + node_radius * 2.0;
+
+        // SVG 开头
+        let mut svg = String::new();
+        svg.push_str(&format!(
+            r#"<svg width="{:.0}" height="{:.0}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">"#,
+            width, height
+        ));
+
+        // 存储各层节点坐标
+        let mut coords: Vec<Vec<(f32, f32)>> = vec![Vec::new(); total_layers];
+
+        // 辅助函数：增加节点（带交互）
+        fn add_node_with_interaction(
+            svg: &mut String,
+            x: f32,
+            y: f32,
+            radius: f32,
+            fill_color: &str,
+            stroke_color: &str,
+            tooltip: &str,
+            onclick_message: &str,
+        ) {
+            svg.push_str(&format!(
+                "<a xlink:href=\"#\" onclick=\"alert('{onclick_message}')\">
+<circle cx=\"{x:.1}\" cy=\"{y:.1}\" r=\"{radius:.1}\" fill=\"{fill_color}\" stroke=\"{stroke_color}\" />
+<title>{tooltip}</title>
+</a>",
+                x = x,
+                y = y,
+                radius = radius,
+                fill_color = fill_color,
+                stroke_color = stroke_color,
+                tooltip = tooltip,
+                onclick_message = onclick_message,
+            ));
+        }
+
+        // 辅助函数：增加连线
+        fn add_line(svg: &mut String, from: (f32, f32), to: (f32, f32)) {
+            svg.push_str(&format!(
+                r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="gray" />"#,
+                from.0, from.1, to.0, to.1
+            ));
+        }
+
+        // 第0层（最底层）
+        let x_0 = margin + node_radius;
+        let y_0 = margin + ((total_layers - 1) as f32) * v_spacing + node_radius;
+        for (i, hash) in self.layers[0].iter().enumerate() {
+            let x = x_0 + i as f32 * h_spacing;
+            let fill_color = "lightblue";
+            let stroke_color = "black";
+            let tooltip = format!("Layer 0, Node {}", i);
+            let onclick_message = format!("Layer 0, Node {}\nHash: {}", i, hash);
+            add_node_with_interaction(
+                &mut svg,
+                x,
+                y_0,
+                node_radius,
+                fill_color,
+                stroke_color,
+                &tooltip,
+                &onclick_message,
+            );
+            coords[0].push((x, y_0));
+        }
+
+        // 更高层
+        for level in 1..total_layers {
+            let y = margin + ((total_layers - 1 - level) as f32) * v_spacing + node_radius;
+            for j in 0..self.layers[level].len() {
+                // 子节点
+                let left = coords[level - 1][2 * j];
+                let right = coords[level - 1][2 * j + 1];
+                let x = (left.0 + right.0) / 2.0;
+
+                let fill_color = "lightblue";
+                let stroke_color = "black";
+                let tooltip = format!("Layer {}, Node {}", level, j);
+                let onclick_message = format!(
+                    "Layer {}, Node {}\nHash: {}",
+                    level, j, self.layers[level][j]
+                );
+
+                add_node_with_interaction(
+                    &mut svg,
+                    x,
+                    y,
+                    node_radius,
+                    fill_color,
+                    stroke_color,
+                    &tooltip,
+                    &onclick_message,
+                );
+                coords[level].push((x, y));
+            }
+        }
+
+        // 连线（子 -> 父）
+        for level in 1..total_layers {
+            for j in 0..self.layers[level].len() {
+                let parent = coords[level][j];
+                let left = coords[level - 1][2 * j];
+                let right = coords[level - 1][2 * j + 1];
+                add_line(&mut svg, left, parent);
+                add_line(&mut svg, right, parent);
+            }
+        }
+
+        // SVG 结尾
+        svg.push_str("</svg>");
+        svg
+    }
+}
+
+// 单独的小函数们，更优雅
+fn draw_node(x: f32, y: f32, r: f32, fill: &str, stroke: &str) -> String {
+    format!(
+        r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="{}" stroke="{}" />"#,
+        x, y, r, fill, stroke
+    )
+}
+
+fn draw_label(x: f32, y: f32, level: usize, idx: usize, font_size: f32) -> String {
+    format!(
+        r#"<text x="{:.1}" y="{:.1}" font-size="{:.1}" text-anchor="middle" fill="black">{}</text>"#,
+        x,
+        y + font_size + 2.0,
+        font_size,
+        format!("{}:{}", level, idx)
+    )
+}
+
+fn draw_line(from: (f32, f32), to: (f32, f32)) -> String {
+    format!(
+        r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="gray" />"#,
+        from.0, from.1, to.0, to.1
+    )
 }
